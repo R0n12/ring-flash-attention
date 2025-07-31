@@ -102,10 +102,12 @@ class RingComm:
         self.rank = dist.get_rank(self._process_group)
         self.world_size = dist.get_world_size(self._process_group)
         self._reqs = None
-
+        # set up src and dst rank
+        # for rank 0, world size 4, dst = 1, src = 3 
+        # this is where the ring is implemented
         self.send_rank = (self.rank + 1) % self.world_size
         self.recv_rank = (self.rank - 1) % self.world_size
-
+        # get the global rank of the src or dst rank
         if process_group is not None:
             self.send_rank = dist.get_global_rank(self._process_group, self.send_rank)
             self.recv_rank = dist.get_global_rank(self._process_group, self.recv_rank)
@@ -113,17 +115,22 @@ class RingComm:
     def send_recv(
         self, to_send: torch.Tensor, recv_tensor: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
+        # if recv buffer is empty
         if recv_tensor is None:
             res = torch.empty_like(to_send)
+        # if recv buffer is not empty
         else:
             res = recv_tensor
-
+        # queue up the ring send and recv for the current rank
+        # send to the next rank
         send_op = dist.P2POp(
             dist.isend, to_send, self.send_rank, group=self._process_group
         )
+        # recv from the previous rank
         recv_op = dist.P2POp(dist.irecv, res, self.recv_rank, group=self._process_group)
         self._ops.append(send_op)
         self._ops.append(recv_op)
+        # returning buffer received from previous rank
         return res
 
     def commit(self):
@@ -146,8 +153,9 @@ class RingComm:
         k_buffer: Optional[torch.Tensor] = None,
         v_buffer: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        next_k, next_v = self.send_recv(k, k_buffer), self.send_recv(v, v_buffer)
-        self.commit()
+        next_k, next_v = self.send_recv(k, k_buffer), self.send_recv(v, v_buffer) # send k -> k_buffer, setting next_k -> k_buffer
+        self.commit() # actually progress the p2p queue
+        # basically send k
         return next_k, next_v
 
 

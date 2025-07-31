@@ -6,7 +6,9 @@ from .llama3_flash_attn_varlen import (
 )
 from .ring_flash_attn import (
     ring_flash_attn_func,
+    ring_flash_attn_quantized_func,
     ring_flash_attn_kvpacked_func,
+    ring_flash_attn_quantized_kvpacked_func,
     ring_flash_attn_qkvpacked_func,
 )
 from .ring_flash_attn_varlen import (
